@@ -1,0 +1,4 @@
+(fp_lib_table
+  (lib (name ADC)(type KiCad)(uri "$(KIPRJMOD)/ADC.pretty")(options "")(descr ""))
+  (lib (name abm3)(type Legacy)(uri /Users/martin/Documents/purple_probe/abm3.mod)(options "")(descr ""))
+)
