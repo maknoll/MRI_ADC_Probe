@@ -148,12 +148,16 @@ int main(void)
   MX_TIM3_Init();
 
   /* USER CODE BEGIN 2 */
+  HAL_StatusTypeDef HAL_Status;
+
+  HAL_Status = HAL_TIM_Base_Start(&htim3);
+    if (HAL_Status != HAL_OK)
+  	  return 0;
   HAL_ADC_Stop_DMA(&hadc1);
   //  HAL_ADC_Stop_DMA(&hadc2);
   //  HAL_ADC_Stop_DMA(&hadc3);
   HAL_ADC_Stop_DMA(&hadc4);
 
-  HAL_StatusTypeDef HAL_Status;
   HAL_Status = HAL_ADCEx_Calibration_SetValue(&hadc1, ADC_SINGLE_ENDED, 0);
   if (HAL_Status != HAL_OK)
 	  return 0;
