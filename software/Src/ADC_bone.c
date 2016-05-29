@@ -86,7 +86,7 @@ void sample(uint32_t baudrate) {
 
 }
 
-void decode(char * filenameprefix) {
+void decode(char * filenameprefix, int error_correction_enabled) {
 
 	enum decoder_state {
 		IDLE,
@@ -114,11 +114,16 @@ void decode(char * filenameprefix) {
 	uint8_t buffer[8];
 	uint16_t count = 0;
 	uint16_t samples = 0;
+	uint32_t error_count = 0;
+	int16_t sample = 0;
+	int16_t last_sample = 0;
+	int total_bytes = 0;
 
     printf("\n\rDecoding...\n\r");
 
     FILE * raw = fopen("raw.bin","r");
-    while(!feof(raw)) {
+    fseek(raw, 0, SEEK_SET);
+    while(!exit_requested && !feof(raw)) {
     	switch (state) {
     	case IDLE:
     		count = fread(buffer, sizeof(char), 1, raw);
@@ -147,15 +152,20 @@ void decode(char * filenameprefix) {
     		}
     		break;
     	case DATA:
-    		count = fread(buffer, sizeof(char), 2, raw);
+    		count = fread(&sample, sizeof(int16_t), 1, raw);
+    		//printf("%i, %i, %i\n",sample,last_sample, abs(sample - last_sample));
     		samples += count;
-    		if (buffer[1] & 0b11110000) {
+    		total_bytes += count;
+    		if (error_correction_enabled && (last_sample != 0) && (abs(sample - last_sample) > 500)) {
+    			//printf("%i, %i, %i\n",sample,last_sample, abs(sample - last_sample));
     			fseek(raw, -1, SEEK_CUR);
+    			error_count++;
     		} else {
-    			fwrite(buffer, sizeof(char), 2, files[active_channel-1]);
+    			last_sample = sample;
+    			fwrite(&sample, sizeof(int16_t), 1, files[active_channel-1]);
     		}
 
-    		if (2000 <= samples) {
+    		if (1000 <= samples) {
     			samples = 0;
     			state = IDLE;
     			//me_decode((uint16_t*)buffer,decoded_buffer,BUFFERLENGTH/2);
@@ -171,17 +181,22 @@ void decode(char * filenameprefix) {
 		fflush(files[i]);
 		fclose(files[i]);
 	}
+	if (error_correction_enabled) {
+		float error_rate = (float)error_count / (float)total_bytes;
+		printf("%i decoding errors, %.4f%% error rate\n", error_count, error_rate*100);
+	}
 }
 
 int main(int argc, char * argv[])
 {
 	int sample_enabled = 1;
 	int decode_enabled = 1;
+	int error_correction_enabled = 1;
 	uint32_t baudrate = 8000000;
 	char filenameprefix[64] = "channel";
 
 	int optint;
-    while ((optint = getopt(argc, argv, "b:f:sd")) != -1)
+    while ((optint = getopt(argc, argv, "b:f:sde")) != -1)
     {
         switch (optint)
         {
@@ -192,6 +207,9 @@ int main(int argc, char * argv[])
         case 'd':
         	sample_enabled = 0;
         	decode_enabled = 1;
+        	break;
+        case 'e':
+        	error_correction_enabled = 0;
         	break;
         case 'b':
         	baudrate = strtoul(optarg, NULL, 0);
@@ -211,7 +229,7 @@ int main(int argc, char * argv[])
     	sample(baudrate);
     }
     if (decode_enabled) {
-    	decode(filenameprefix);
+    	decode(filenameprefix, error_correction_enabled);
     }
 
     signal(SIGINT, SIG_DFL);
