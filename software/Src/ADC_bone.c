@@ -96,12 +96,22 @@ void decode(char * filenameprefix, int error_correction_enabled) {
 	};
 
     FILE * files[4] = {0};
+    FILE * error_files[4] = {0};
 
     for (int i=0; i<4; i++) {
     	char filename[128];
+    	char error_filename[128];
     	snprintf(filename, sizeof(filename), "%s-%i.bin", filenameprefix, i+1);
+    	snprintf(error_filename, sizeof(error_filename), "error_%s-%i.txt", filenameprefix, i+1);
     	files[i] = fopen(filename,"w");
+    	error_files[i] = fopen(error_filename,"w");
     	if (files[i] == NULL) {
+    		fprintf(stderr, "Value of errno: %d\n", errno);
+    		perror("Error printed by perror");
+    		fprintf(stderr, "Error opening file: %s\n", strerror(errno));
+    		exit(EXIT_FAILURE);
+    	}
+    	if (error_files[i] == NULL) {
     		fprintf(stderr, "Value of errno: %d\n", errno);
     		perror("Error printed by perror");
     		fprintf(stderr, "Error opening file: %s\n", strerror(errno));
@@ -118,6 +128,8 @@ void decode(char * filenameprefix, int error_correction_enabled) {
 	int16_t sample = 0;
 	int16_t last_sample = 0;
 	int total_bytes = 0;
+	uint32_t output_index[4] = {0};
+	uint32_t error_blocksize[4] = {0};
 
     printf("\n\rDecoding...\n\r");
 
@@ -159,10 +171,18 @@ void decode(char * filenameprefix, int error_correction_enabled) {
     		if (error_correction_enabled && (last_sample != 0) && (abs(sample - last_sample) > 500)) {
     			//printf("%i, %i, %i\n",sample,last_sample, abs(sample - last_sample));
     			fseek(raw, -1, SEEK_CUR);
-    			error_count++;
+    			error_blocksize[active_channel-1] += 1;
+    			fprintf(error_files[active_channel-1],"%i, %i\n",output_index[active_channel-1], error_blocksize[active_channel-1]);
+    			error_count += 1;
     		} else {
+    			if (0 != error_blocksize[active_channel-1]) {
+    				printf("%i, %i, %i\n",active_channel, output_index[active_channel-1], error_blocksize[active_channel-1]);
+    				fprintf(error_files[active_channel-1],"%i, %i\n",output_index[active_channel-1], error_blocksize[active_channel-1]);
+    				error_blocksize[active_channel-1] = 0;
+    			}
     			last_sample = sample;
     			fwrite(&sample, sizeof(int16_t), 1, files[active_channel-1]);
+    			output_index[active_channel-1] += 1;
     		}
 
     		if (1000 <= samples) {
@@ -178,7 +198,9 @@ void decode(char * filenameprefix, int error_correction_enabled) {
 	fclose(raw);
 
 	for (int i=0; i<4; i++) {
+		fflush(error_files[i]);
 		fflush(files[i]);
+		fclose(error_files[i]);
 		fclose(files[i]);
 	}
 	if (error_correction_enabled) {
